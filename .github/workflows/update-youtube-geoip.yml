@@ -58,7 +58,7 @@ jobs:
           echo "==> Generating .mrs file with Mihomo..."
           docker pull metacubex/mihomo:v1.19.15
           docker run --rm -v "${{ github.workspace }}:/work" metacubex/mihomo:v1.19.15 \
-            mihomo convert-ruleset ipcidr text /work/cidr_all.txt /work/youtube_geoip.mrs
+            /mihomo/mihomo convert-ruleset ipcidr text /work/cidr_all.txt /work/youtube_geoip.mrs
           stat -c '%s %n' youtube_geoip.mrs
 
       - name: Publish to gh-pages
