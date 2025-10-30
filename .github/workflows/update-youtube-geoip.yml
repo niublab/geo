@@ -2,8 +2,8 @@ name: update-youtube-geoip
 
 on:
   schedule:
-    - cron: '*/5 * * * *'   # ✅ 每 5 分钟自动运行
-  workflow_dispatch: {}      # ✅ 支持手动触发
+    - cron: '*/5 * * * *'   # ✅ 每 5 分钟自动执行
+  workflow_dispatch: {}      # ✅ 手动触发支持
 
 jobs:
   build:
@@ -16,7 +16,7 @@ jobs:
       - name: Fetch YouTube CIDR lists
         run: |
           set -e
-          echo "==> Download YouTube IPv4/IPv6 CIDR lists..."
+          echo "==> Downloading YouTube CIDR lists..."
           URL4="https://raw.githubusercontent.com/touhidurrr/iplist-youtube/main/lists/cidr4.txt"
           URL6="https://raw.githubusercontent.com/touhidurrr/iplist-youtube/main/lists/cidr6.txt"
 
@@ -51,14 +51,15 @@ jobs:
           echo "$NEW_HASH" > last_cidr_sha.txt
           echo "no_change=false" >> $GITHUB_OUTPUT
 
-      - name: Generate youtube_geoip.mrs
+      - name: Download Mihomo binary
         if: steps.check.outputs.no_change == 'false'
         run: |
           set -e
-          echo "==> Generating .mrs file with Mihomo..."
-          docker pull metacubex/mihomo:v1.19.15
-          docker run --rm -v "${{ github.workspace }}:/work" metacubex/mihomo:v1.19.15 \
-            /mihomo/mihomo convert-ruleset ipcidr text /work/cidr_all.txt /work/youtube_geoip.mrs
+          echo "==> Downloading Mihomo binary..."
+          MIHOMO_URL="https://github.com/MetaCubeX/mihomo/releases/latest/download/mihomo-linux-amd64"
+          curl -L -o mihomo "$MIHOMO_URL"
+          chmod +x mihomo
+          ./mihomo convert-ruleset ipcidr text cidr_all.txt youtube_geoip.mrs
           stat -c '%s %n' youtube_geoip.mrs
 
       - name: Publish to gh-pages
