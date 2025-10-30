@@ -4,6 +4,12 @@ on:
   schedule:
     - cron: '*/5 * * * *'   # ✅ 每 5 分钟自动执行
   workflow_dispatch: {}      # ✅ 手动触发支持
+name: update-youtube-geoip
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # ✅ 每 5 分钟运行一次（UTC）
+  workflow_dispatch: {}     # ✅ 手动触发支持
 
 jobs:
   build:
@@ -19,15 +25,12 @@ jobs:
           echo "==> Downloading YouTube CIDR lists..."
           URL4="https://raw.githubusercontent.com/touhidurrr/iplist-youtube/main/lists/cidr4.txt"
           URL6="https://raw.githubusercontent.com/touhidurrr/iplist-youtube/main/lists/cidr6.txt"
-
           curl -sS --fail --retry 5 --retry-delay 2 -o cidr4.txt "$URL4" || true
           curl -sS --fail --retry 5 --retry-delay 2 -o cidr6.txt "$URL6" || true
-
           if [ ! -s cidr4.txt ] && [ ! -s cidr6.txt ]; then
             echo "❌ Failed: No CIDR files downloaded."
             exit 1
           fi
-
           cat cidr4.txt cidr6.txt 2>/dev/null \
             | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' \
             | grep -v '^#' | grep -v '^$' | sort -u > cidr_all.txt
@@ -45,7 +48,7 @@ jobs:
           fi
           if [ "$NEW_HASH" = "$OLD_HASH" ]; then
             echo "no_change=true" >> $GITHUB_OUTPUT
-            echo "ℹ️ No changes detected."
+            echo "ℹ️ No changes detected; skipping."
             exit 0
           fi
           echo "$NEW_HASH" > last_cidr_sha.txt
@@ -56,12 +59,11 @@ jobs:
         run: |
           set -e
           echo "==> Downloading Mihomo binary..."
-          MIHOMO_URL="https://github.com/MetaCubeX/mihomo/releases/latest/download/mihomo-linux-amd64.zip"
-          curl -L -o mihomo "$MIHOMO_URL"
-          unzip mihomo-linux-amd64.zip
+          MIHOMO_URL="https://github.com/MetaCubeX/mihomo/releases/download/v1.19.15/mihomo-linux-amd64-v1.19.15.gz"
+          curl -L -o mihomo.gz "$MIHOMO_URL"
+          gunzip mihomo.gz
           chmod +x mihomo
           ./mihomo convert-ruleset ipcidr text cidr_all.txt youtube_geoip.mrs
-          stat -c '%s %n' youtube_geoip.mrs
 
       - name: Publish to gh-pages
         if: steps.check.outputs.no_change == 'false'
@@ -74,7 +76,7 @@ jobs:
           git init
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .
+          git add youtube_geoip.mrs
           git commit -m "update youtube_geoip.mrs $(date -u +'%Y-%m-%d %H:%M:%S')"
           git branch -M gh-pages
           git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
@@ -85,3 +87,4 @@ jobs:
           git add last_cidr_sha.txt || true
           git commit -m "chore: update hash" || true
           git push || true
+
