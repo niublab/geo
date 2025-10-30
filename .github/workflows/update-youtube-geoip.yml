@@ -17,14 +17,23 @@ jobs:
       - name: Fetch and build CIDR list
         run: |
           set -e
-          curl -fsSL -o cidr4.txt https://raw.githubusercontent.com/touhidurrr/iplist-youtube/main/cidr4.txt
-          curl -fsSL -o cidr6.txt https://raw.githubusercontent.com/touhidurrr/iplist-youtube/main/cidr6.txt || true
-          cat cidr4.txt cidr6.txt \
+          echo "Download cidr4/cidr6 from touhidurrr (lists/ directory)..."
+          URL4="https://raw.githubusercontent.com/touhidurrr/iplist-youtube/main/lists/cidr4.txt"
+          URL6="https://raw.githubusercontent.com/touhidurrr/iplist-youtube/main/lists/cidr6.txt"
+          curl -sS --fail --show-error --retry 5 --retry-delay 2 --max-time 30 -o cidr4.txt "$URL4" || true
+          curl -sS --fail --show-error --retry 5 --retry-delay 2 --max-time 30 -o cidr6.txt "$URL6" || true
+
+          if [ ! -s cidr4.txt ] && [ ! -s cidr6.txt ]; then
+            echo "ERROR: both cidr4.txt and cidr6.txt are missing or empty. Exiting."
+            exit 1
+          fi
+
+          cat cidr4.txt cidr6.txt 2>/dev/null \
             | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' \
             | grep -v '^#' \
             | grep -v '^$' \
             | sort -u > cidr_all.txt
-          echo "Lines:" $(wc -l < cidr_all.txt)
+          echo "Lines in cidr_all.txt:" $(wc -l < cidr_all.txt)
 
       - name: Check if CIDR changed
         id: check
