@@ -2,40 +2,38 @@ name: update-youtube-geoip
 
 on:
   schedule:
-    - cron: '*/5 * * * *'   # 每 5 分钟运行一次（UTC）
+    - cron: '0 */6 * * *'   # 每 6 小时自动运行
   workflow_dispatch: {}
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-        with:
-          persist-credentials: true
 
-      - name: Fetch and build CIDR list
+      - name: Fetch YouTube CIDR lists
         run: |
           set -e
-          echo "Download cidr4/cidr6 from touhidurrr (lists/ directory)..."
+          echo "==> Download YouTube IPv4/IPv6 CIDR lists..."
           URL4="https://raw.githubusercontent.com/touhidurrr/iplist-youtube/main/lists/cidr4.txt"
           URL6="https://raw.githubusercontent.com/touhidurrr/iplist-youtube/main/lists/cidr6.txt"
-          curl -sS --fail --show-error --retry 5 --retry-delay 2 --max-time 30 -o cidr4.txt "$URL4" || true
-          curl -sS --fail --show-error --retry 5 --retry-delay 2 --max-time 30 -o cidr6.txt "$URL6" || true
+
+          curl -sS --fail --retry 5 --retry-delay 2 -o cidr4.txt "$URL4" || true
+          curl -sS --fail --retry 5 --retry-delay 2 -o cidr6.txt "$URL6" || true
 
           if [ ! -s cidr4.txt ] && [ ! -s cidr6.txt ]; then
-            echo "ERROR: both cidr4.txt and cidr6.txt are missing or empty. Exiting."
+            echo "❌ Failed: No CIDR files downloaded."
             exit 1
           fi
 
           cat cidr4.txt cidr6.txt 2>/dev/null \
             | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' \
-            | grep -v '^#' \
-            | grep -v '^$' \
-            | sort -u > cidr_all.txt
-          echo "Lines in cidr_all.txt:" $(wc -l < cidr_all.txt)
+            | grep -v '^#' | grep -v '^$' | sort -u > cidr_all.txt
+          echo "✅ CIDR lines: $(wc -l < cidr_all.txt)"
 
-      - name: Check if CIDR changed
+      - name: Check for changes
         id: check
         run: |
           set -e
@@ -45,36 +43,45 @@ jobs:
           else
             OLD_HASH=""
           fi
-          echo "old=$OLD_HASH" > hashinfo.txt
-          echo "new=$NEW_HASH" >> hashinfo.txt
+          echo "old=$OLD_HASH"
+          echo "new=$NEW_HASH"
           if [ "$NEW_HASH" = "$OLD_HASH" ]; then
             echo "no_change=true" >> $GITHUB_OUTPUT
-            echo "CIDR not changed; exiting."
+            echo "ℹ️ No changes detected."
             exit 0
           fi
           echo "$NEW_HASH" > last_cidr_sha.txt
           echo "no_change=false" >> $GITHUB_OUTPUT
 
-      - name: Generate .mrs using mihomo docker image
+      - name: Generate youtube_geoip.mrs
         if: steps.check.outputs.no_change == 'false'
         run: |
           set -e
-          DOCKER_IMAGE=metacubex/mihomo:v1.19.15
-          docker pull "${DOCKER_IMAGE}"
-          docker run --rm -v "${{ github.workspace }}:/work" "${DOCKER_IMAGE}" \
+          echo "==> Generating .mrs file with Mihomo..."
+          docker pull metacubex/mihomo:v1.19.15
+          docker run --rm -v "${{ github.workspace }}:/work" metacubex/mihomo:v1.19.15 \
             mihomo convert-ruleset ipcidr text /work/cidr_all.txt /work/youtube_geoip.mrs
-          stat -c '%s %n' youtube_geoip.mrs || true
+          stat -c '%s %n' youtube_geoip.mrs
 
-      - name: Commit & push when changed
+      - name: Publish to gh-pages
         if: steps.check.outputs.no_change == 'false'
         run: |
           set -e
-          git add youtube_geoip.mrs last_cidr_sha.txt || true
-          if git diff --cached --quiet; then
-            echo "No file changes to commit."
-            exit 0
-          fi
+          echo "==> Publishing to gh-pages..."
+          mkdir -p public
+          cp youtube_geoip.mrs public/
+          cd public
+          git init
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git commit -m "chore(rules): update youtube_geoip.mrs @ $(date -u +'%Y-%m-%d %H:%M:%S')"
-          git push
+          git add .
+          git commit -m "update youtube_geoip.mrs $(date -u +'%Y-%m-%d %H:%M:%S')"
+          git branch -M gh-pages
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
+
+      - name: Save last hash
+        if: steps.check.outputs.no_change == 'false'
+        run: |
+          git add last_cidr_sha.txt || true
+          git commit -m "chore: update hash" || true
+          git push || true
