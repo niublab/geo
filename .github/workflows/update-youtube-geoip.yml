@@ -56,8 +56,9 @@ jobs:
         run: |
           set -e
           echo "==> Downloading Mihomo binary..."
-          MIHOMO_URL="https://github.com/MetaCubeX/mihomo/releases/latest/download/mihomo-linux-amd64"
+          MIHOMO_URL="https://github.com/MetaCubeX/mihomo/releases/latest/download/mihomo-linux-amd64.zip"
           curl -L -o mihomo "$MIHOMO_URL"
+          unzip mihomo-linux-amd64.zip
           chmod +x mihomo
           ./mihomo convert-ruleset ipcidr text cidr_all.txt youtube_geoip.mrs
           stat -c '%s %n' youtube_geoip.mrs
